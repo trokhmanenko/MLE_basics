@@ -14,9 +14,12 @@ from datetime import datetime
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
-
-# Comment this lines if you have problems with MLFlow installation
+from utils import get_project_dir, configure_logging
 import mlflow
+from dotenv import load_dotenv
+
+load_dotenv()
+
 mlflow.autolog()
 
 # Adds the root directory to system path
@@ -24,9 +27,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(ROOT_DIR))
 
 # Change to CONF_FILE = "settings.json" if you have problems with env variables
-CONF_FILE = os.getenv('CONF_PATH') 
-
-from utils import get_project_dir, configure_logging
+CONF_FILE = os.getenv('CONF_PATH')
 
 # Loads configuration settings from JSON
 with open(CONF_FILE, "r") as file:
@@ -39,10 +40,10 @@ TRAIN_PATH = os.path.join(DATA_DIR, conf['train']['table_name'])
 
 # Initializes parser for command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument("--train_file", 
-                    help="Specify inference data file", 
+parser.add_argument("--train_file",
+                    help="Specify inference data file",
                     default=conf['train']['table_name'])
-parser.add_argument("--model_path", 
+parser.add_argument("--model_path",
                     help="Specify the path for the output model")
 
 
@@ -59,7 +60,7 @@ class DataProcessor():
     def data_extraction(self, path: str) -> pd.DataFrame:
         logging.info(f"Loading data from {path}...")
         return pd.read_csv(path)
-    
+
     def data_rand_sampling(self, df: pd.DataFrame, max_rows: int) -> pd.DataFrame:
         if not max_rows or max_rows < 0:
             logging.info('Max_rows not defined. Skipping sampling.')
@@ -87,9 +88,9 @@ class Training():
 
     def data_split(self, df: pd.DataFrame, test_size: float = 0.33) -> tuple:
         logging.info("Splitting data into training and test sets...")
-        return train_test_split(df[['x1','x2']], df['y'], test_size=test_size, 
+        return train_test_split(df[['x1', 'x2']], df['y'], test_size=test_size,
                                 random_state=conf['general']['random_state'])
-    
+
     def train(self, X_train: pd.DataFrame, y_train: pd.DataFrame) -> None:
         logging.info("Training the model...")
         self.model.fit(X_train, y_train)

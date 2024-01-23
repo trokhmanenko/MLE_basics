@@ -8,7 +8,7 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(ROOT_DIR))
 CONF_FILE = os.getenv('CONF_PATH')
 
-from training.train import DataProcessor, Training 
+from training.train import DataProcessor, Training
 
 
 class TestDataProcessor(unittest.TestCase):

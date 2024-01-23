@@ -5,6 +5,10 @@ import logging
 import os
 import sys
 import json
+from utils import singleton, get_project_dir, configure_logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Create logger
 logger = logging.getLogger()
@@ -13,7 +17,6 @@ logger.setLevel(logging.INFO)
 # Define directories
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(ROOT_DIR))
-from utils import singleton, get_project_dir, configure_logging
 
 DATA_DIR = os.path.abspath(os.path.join(ROOT_DIR, '../data'))
 if not os.path.exists(DATA_DIR):
@@ -32,6 +35,7 @@ logger.info("Defining paths...")
 DATA_DIR = get_project_dir(conf['general']['data_dir'])
 TRAIN_PATH = os.path.join(DATA_DIR, conf['train']['table_name'])
 INFERENCE_PATH = os.path.join(DATA_DIR, conf['inference']['inp_table_name'])
+
 
 # Singleton class for generating XOR data set
 @singleton
@@ -61,11 +65,12 @@ class XorSetGenerator():
         logger.info("Generating target...")
         df['y'] = np.logical_xor(df['x1'], df['x2'])
         return df
-    
+
     # Method to save data
     def save(self, df: pd.DataFrame, out_path: os.path):
         logger.info(f"Saving data to {out_path}...")
         df.to_csv(out_path, index=False)
+
 
 # Main execution
 if __name__ == "__main__":
