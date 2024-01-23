@@ -22,12 +22,14 @@ DATA_DIR = os.path.abspath(os.path.join(ROOT_DIR, '../data'))
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-# Change to CONF_FILE = "settings.json" if you have problems with env variables
-CONF_FILE = os.getenv('CONF_PATH')
+# Define the path to the project root directory
+PROJECT_ROOT_DIR = get_project_dir('')
 
 # Load configuration settings from JSON
+CONF_FILE = os.getenv('CONF_PATH')
+CONF_PATH = os.path.join(PROJECT_ROOT_DIR, CONF_FILE)
 logger.info("Loading configuration settings from JSON...")
-with open(CONF_FILE, "r") as file:
+with open(CONF_PATH, "r") as file:
     conf = json.load(file)
 
 # Define paths

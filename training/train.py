@@ -20,17 +20,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-mlflow.autolog()
-
 # Adds the root directory to system path
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(ROOT_DIR))
 
-# Change to CONF_FILE = "settings.json" if you have problems with env variables
-CONF_FILE = os.getenv('CONF_PATH')
+# Define the path to the project root directory
+PROJECT_ROOT_DIR = get_project_dir('')
 
-# Loads configuration settings from JSON
-with open(CONF_FILE, "r") as file:
+# Load configuration settings from JSON
+CONF_FILE = os.getenv('CONF_PATH')
+CONF_PATH = os.path.join(PROJECT_ROOT_DIR, CONF_FILE)
+with open(CONF_PATH, "r") as file:
     conf = json.load(file)
 
 # Defines paths
@@ -118,6 +118,11 @@ class Training():
 
 def main():
     configure_logging()
+
+    mlflow_tracking_uri = 'file://' + os.path.abspath(os.path.join(ROOT_DIR, '..', 'mlruns'))
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+
+    mlflow.autolog()
 
     data_proc = DataProcessor()
     tr = Training()

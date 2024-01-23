@@ -10,22 +10,25 @@ import os
 import pickle
 import sys
 from datetime import datetime
-from typing import List
-
+# from typing import List
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
+from utils import get_project_dir, configure_logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Adds the root directory to system path
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(ROOT_DIR))
 
-# Change to CONF_FILE = "settings.json" if you have problems with env variables
+# Define the path to the project root directory
+PROJECT_ROOT_DIR = get_project_dir('')
+
+# Load configuration settings from JSON
 CONF_FILE = os.getenv('CONF_PATH')
-
-from utils import get_project_dir, configure_logging
-
-# Loads configuration settings from JSON
-with open(CONF_FILE, "r") as file:
+CONF_PATH = os.path.join(PROJECT_ROOT_DIR, CONF_FILE)
+with open(CONF_PATH, "r") as file:
     conf = json.load(file)
 
 # Defines paths
@@ -35,10 +38,10 @@ RESULTS_DIR = get_project_dir(conf['general']['results_dir'])
 
 # Initializes parser for command line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument("--infer_file", 
-                    help="Specify inference data file", 
+parser.add_argument("--infer_file",
+                    help="Specify inference data file",
                     default=conf['inference']['inp_table_name'])
-parser.add_argument("--out_path", 
+parser.add_argument("--out_path",
                     help="Specify the path to the output table")
 
 
