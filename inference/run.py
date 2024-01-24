@@ -7,12 +7,11 @@ import argparse
 import json
 import logging
 import os
-import pickle
 import sys
 from datetime import datetime
-# from typing import List
 import pandas as pd
-from sklearn.tree import DecisionTreeClassifier
+import torch
+import torch.nn as nn
 from utils import get_project_dir, configure_logging
 from dotenv import load_dotenv
 
@@ -50,19 +49,34 @@ def get_latest_model_path() -> str:
     latest = None
     for (dirpath, dirnames, filenames) in os.walk(MODEL_DIR):
         for filename in filenames:
-            if not latest or datetime.strptime(latest, conf['general']['datetime_format'] + '.pickle') < \
-                    datetime.strptime(filename, conf['general']['datetime_format'] + '.pickle'):
+            if not latest or datetime.strptime(latest, conf['general']['datetime_format'] + '.pth') < \
+                    datetime.strptime(filename, conf['general']['datetime_format'] + '.pth'):
                 latest = filename
     return os.path.join(MODEL_DIR, latest)
 
 
-def get_model_by_path(path: str) -> DecisionTreeClassifier:
-    """Loads and returns the specified model"""
+class SimpleNet(nn.Module):
+    def __init__(self, input_size, hidden_size, num_classes):
+        super(SimpleNet, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_size, num_classes)
+
+    def forward(self, x):
+        out = self.fc1(x)
+        out = self.relu(out)
+        out = self.fc2(out)
+        return out
+
+
+def get_model_by_path(path: str) -> nn.Module:
+    """Loads and returns the specified PyTorch model"""
+    model = SimpleNet(input_size=4, hidden_size=10, num_classes=3)
     try:
-        with open(path, 'rb') as f:
-            model = pickle.load(f)
-            logging.info(f'Path of the model: {path}')
-            return model
+        model.load_state_dict(torch.load(path))
+        model.eval()
+        logging.info(f'Path of the model: {path}')
+        return model
     except Exception as e:
         logging.error(f'An error occurred while loading the model: {e}')
         sys.exit(1)
@@ -78,10 +92,14 @@ def get_inference_data(path: str) -> pd.DataFrame:
         sys.exit(1)
 
 
-def predict_results(model: DecisionTreeClassifier, infer_data: pd.DataFrame) -> pd.DataFrame:
-    """Predict de results and join it with the infer_data"""
-    results = model.predict(infer_data)
-    infer_data['results'] = results
+def predict_results(model: nn.Module, infer_data: pd.DataFrame) -> pd.DataFrame:
+    """Predict the results using a PyTorch model"""
+    features = infer_data[['sepal length', 'sepal width', 'petal length', 'petal width']].values
+    features = torch.tensor(features, dtype=torch.float32)
+    with torch.no_grad():
+        results = model(features)
+        _, predicted = torch.max(results.data, 1)
+    infer_data['results'] = predicted.numpy()
     return infer_data
 
 
@@ -92,7 +110,7 @@ def store_results(results: pd.DataFrame, path: str = None) -> None:
             os.makedirs(RESULTS_DIR)
         path = datetime.now().strftime(conf['general']['datetime_format']) + '.csv'
         path = os.path.join(RESULTS_DIR, path)
-    pd.DataFrame(results).to_csv(path, index=False)
+    results.to_csv(path, index=False)
     logging.info(f'Results saved to {path}')
 
 

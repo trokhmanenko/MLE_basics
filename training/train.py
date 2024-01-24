@@ -5,18 +5,20 @@ This script prepares the data, runs the training, and saves the model.
 import argparse
 import os
 import sys
-import pickle
 import json
 import logging
 import pandas as pd
-import time
-from datetime import datetime
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.model_selection import train_test_split
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import f1_score
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from utils import get_project_dir, configure_logging
 import mlflow
 from dotenv import load_dotenv
+import datetime
 
 load_dotenv()
 
@@ -47,73 +49,96 @@ parser.add_argument("--model_path",
                     help="Specify the path for the output model")
 
 
-class DataProcessor():
+class DataProcessor:
     def __init__(self) -> None:
         pass
 
-    def prepare_data(self, max_rows: int = None) -> pd.DataFrame:
+    @staticmethod
+    def prepare_data(path: str, max_rows: int = None) -> pd.DataFrame:
         logging.info("Preparing data for training...")
-        df = self.data_extraction(TRAIN_PATH)
-        df = self.data_rand_sampling(df, max_rows)
+        df = pd.read_csv(path)
+        if max_rows is not None:
+            df = df.sample(n=min(max_rows, len(df)), random_state=conf['general']['random_state'])
+        df = DataProcessor.normalize_data(df)
         return df
 
-    def data_extraction(self, path: str) -> pd.DataFrame:
-        logging.info(f"Loading data from {path}...")
-        return pd.read_csv(path)
-
-    def data_rand_sampling(self, df: pd.DataFrame, max_rows: int) -> pd.DataFrame:
-        if not max_rows or max_rows < 0:
-            logging.info('Max_rows not defined. Skipping sampling.')
-        elif len(df) < max_rows:
-            logging.info('Size of dataframe is less than max_rows. Skipping sampling.')
-        else:
-            df = df.sample(n=max_rows, replace=False, random_state=conf['general']['random_state'])
-            logging.info(f'Random sampling performed. Sample size: {max_rows}')
+    @staticmethod
+    def normalize_data(df: pd.DataFrame) -> pd.DataFrame:
+        feature_cols = ['sepal length', 'sepal width', 'petal length', 'petal width']  # Захардкоденные названия колонок
+        scaler = StandardScaler()
+        df[feature_cols] = scaler.fit_transform(df[feature_cols])
         return df
 
 
-class Training():
+class SimpleNet(nn.Module):
+    def __init__(self, input_size, hidden_size, num_classes):
+        super(SimpleNet, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(hidden_size, num_classes)
+
+    def forward(self, x):
+        out = self.fc1(x)
+        out = self.relu(out)
+        out = self.fc2(out)
+        return out
+
+
+class Training:
     def __init__(self) -> None:
-        self.model = DecisionTreeClassifier(random_state=conf['general']['random_state'])
+        self.model = SimpleNet(input_size=4, hidden_size=10, num_classes=3)
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.1)
 
-    def run_training(self, df: pd.DataFrame, out_path: str = None, test_size: float = 0.33) -> None:
+    def run_training(self, df: pd.DataFrame, test_size: float = 0.33, epochs: int = 10) -> None:
         logging.info("Running training...")
-        X_train, X_test, y_train, y_test = self.data_split(df, test_size=test_size)
-        start_time = time.time()
-        self.train(X_train, y_train)
-        end_time = time.time()
-        logging.info(f"Training completed in {end_time - start_time} seconds.")
-        self.test(X_test, y_test)
-        self.save(out_path)
+        x_train, x_test, y_train, y_test = self.data_split(df, test_size)
+        train_loader = DataLoader(TensorDataset(torch.tensor(x_train.values, dtype=torch.float32),
+                                                torch.tensor(y_train.values, dtype=torch.long)),
+                                  batch_size=64, shuffle=True)
 
-    def data_split(self, df: pd.DataFrame, test_size: float = 0.33) -> tuple:
-        logging.info("Splitting data into training and test sets...")
-        return train_test_split(df[['x1', 'x2']], df['y'], test_size=test_size,
-                                random_state=conf['general']['random_state'])
+        for epoch in range(epochs):
+            self.train_epoch(train_loader)
+            logging.info(f'Epoch [{epoch + 1}/{epochs}] completed.')
 
-    def train(self, X_train: pd.DataFrame, y_train: pd.DataFrame) -> None:
-        logging.info("Training the model...")
-        self.model.fit(X_train, y_train)
+        self.test(torch.tensor(x_test.values, dtype=torch.float32), torch.tensor(y_test.values, dtype=torch.long))
 
-    def test(self, X_test: pd.DataFrame, y_test: pd.DataFrame) -> float:
-        logging.info("Testing the model...")
-        y_pred = self.model.predict(X_test)
-        res = f1_score(y_test, y_pred)
-        logging.info(f"f1_score: {res}")
-        return res
+    @staticmethod
+    def data_split(df: pd.DataFrame, test_size: float) -> tuple:
+        feature_cols = ['sepal length', 'sepal width', 'petal length', 'petal width']
+        x = df[feature_cols]
+        y = df['target']
+        return train_test_split(x, y, test_size=test_size, random_state=conf['general']['random_state'])
 
-    def save(self, path: str) -> None:
+    def train_epoch(self, train_loader):
+        self.model.train()
+        for inputs, labels in train_loader:
+            self.optimizer.zero_grad()
+            outputs = self.model(inputs)
+            loss = self.criterion(outputs, labels)
+            loss.backward()
+            self.optimizer.step()
+
+    def test(self, x_test: torch.Tensor, y_test: torch.Tensor) -> None:
+        self.model.eval()
+        with torch.no_grad():
+            outputs = self.model(x_test)
+            _, predicted = torch.max(outputs.data, 1)
+            f1 = f1_score(y_test.numpy(), predicted.numpy(), average='weighted')
+            logging.info(f"f1_score: {f1}")
+
+    def save(self, path: str = None) -> None:
         logging.info("Saving the model...")
         if not os.path.exists(MODEL_DIR):
             os.makedirs(MODEL_DIR)
 
-        if not path:
-            path = os.path.join(MODEL_DIR, datetime.now().strftime(conf['general']['datetime_format']) + '.pickle')
-        else:
-            path = os.path.join(MODEL_DIR, path)
+        filename = datetime.datetime.now().strftime(conf['general']['datetime_format']) + '.pth'
+        save_path = os.path.join(MODEL_DIR, filename)
 
-        with open(path, 'wb') as f:
-            pickle.dump(self.model, f)
+        if path:
+            save_path = os.path.join(MODEL_DIR, path + "_" + filename)
+
+        torch.save(self.model.state_dict(), save_path)
 
 
 def main():
@@ -125,10 +150,11 @@ def main():
     mlflow.autolog()
 
     data_proc = DataProcessor()
-    tr = Training()
+    df = data_proc.prepare_data(TRAIN_PATH, max_rows=conf['train']['data_sample'])
 
-    df = data_proc.prepare_data(max_rows=conf['train']['data_sample'])
-    tr.run_training(df, test_size=conf['train']['test_size'])
+    tr = Training()
+    tr.run_training(df, test_size=conf['train']['test_size'], epochs=conf['train']['epochs'])
+    tr.save()
 
 
 if __name__ == "__main__":

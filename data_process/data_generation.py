@@ -1,10 +1,10 @@
-# Importing required libraries
 import numpy as np
 import pandas as pd
 import logging
 import os
 import sys
 import json
+from sklearn.datasets import load_iris
 from utils import singleton, get_project_dir, configure_logging
 from dotenv import load_dotenv
 
@@ -39,46 +39,45 @@ TRAIN_PATH = os.path.join(DATA_DIR, conf['train']['table_name'])
 INFERENCE_PATH = os.path.join(DATA_DIR, conf['inference']['inp_table_name'])
 
 
-# Singleton class for generating XOR data set
 @singleton
-class XorSetGenerator():
+class IrisDataProcessor:
     def __init__(self):
-        self.df = None
+        self.data = None
+        self.target = None
 
-    # Method to create the XOR data
-    def create(self, len: int, save_path: os.path, is_labeled: bool = True):
-        logger.info("Creating XOR dataset...")
-        self.df = self._generate_features(len)
-        if is_labeled:
-            self.df = self._generate_target(self.df)
-        if save_path:
-            self.save(self.df, save_path)
-        return self.df
+    def load_data(self):
+        logger.info("Loading Iris dataset...")
+        iris = load_iris()
+        self.data = iris.data
+        self.target = iris.target
 
-    # Method to generate features
-    def _generate_features(self, n: int) -> pd.DataFrame:
-        logger.info("Generating features...")
-        x1 = np.random.choice([True, False], size=n)
-        x2 = np.random.choice([True, False], size=n)
-        return pd.DataFrame(list(zip(x1, x2)), columns=['x1', 'x2'])
+    def split_data(self):
+        logger.info("Splitting data into training and inference sets...")
+        inference_size = int(0.1 * len(self.data))
+        indices = np.arange(len(self.data))
+        np.random.shuffle(indices)
 
-    # Method to generate target
-    def _generate_target(self, df: pd.DataFrame) -> pd.DataFrame:
-        logger.info("Generating target...")
-        df['y'] = np.logical_xor(df['x1'], df['x2'])
-        return df
+        inference_indices = indices[:inference_size]
+        train_indices = indices[inference_size:]
 
-    # Method to save data
-    def save(self, df: pd.DataFrame, out_path: os.path):
-        logger.info(f"Saving data to {out_path}...")
-        df.to_csv(out_path, index=False)
+        return (self.data[train_indices], self.target[train_indices]), (
+            self.data[inference_indices], self.target[inference_indices])
+
+    @staticmethod
+    def save_data(data, target, path):
+        logger.info(f"Saving data to {path}...")
+        df = pd.DataFrame(data, columns=['sepal length', 'sepal width', 'petal length', 'petal width'])
+        df['target'] = target
+        df.to_csv(path, index=False)
 
 
 # Main execution
 if __name__ == "__main__":
     configure_logging()
     logger.info("Starting script...")
-    gen = XorSetGenerator()
-    gen.create(len=256, save_path=TRAIN_PATH)
-    gen.create(len=64, save_path=INFERENCE_PATH, is_labeled=False)
+    iris_processor = IrisDataProcessor()
+    iris_processor.load_data()
+    train_set, inference_set = iris_processor.split_data()
+    iris_processor.save_data(*train_set, TRAIN_PATH)
+    iris_processor.save_data(*inference_set, INFERENCE_PATH)
     logger.info("Script completed successfully.")
