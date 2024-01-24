@@ -20,3 +20,6 @@ venv/
 
 # Installer logs
 pip-log.txt
+
+# Allow CSV files in data directory
+!/data/*.csv
